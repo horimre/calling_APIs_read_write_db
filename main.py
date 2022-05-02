@@ -3,7 +3,9 @@ import requests
 from requests.exceptions import HTTPError
 import logging
 import pandas as pd
+import sqlalchemy
 import ApiKeys
+import DbConf
 
 
 class EmptyResultException(Exception):
@@ -136,6 +138,16 @@ def process_news(news_json: json) -> str:
         return "No articles found!"
 
 
+def load_to_db(df: pd.DataFrame):
+    try:
+        engine = sqlalchemy.create_engine(f'mysql+pymysql://{DbConf.db_conf["user"]}:{DbConf.db_conf["password"]}'
+                                          f'@localhost:{DbConf.db_conf["port"]}/{DbConf.db_conf["db"]}')
+        df.to_sql(DbConf.db_conf["table_name"], engine, if_exists='append', index=False)
+    except Exception as e:
+        # logging.error(f"Error: {e}", exc_info=True)
+        raise
+
+
 # set log level
 logging.basicConfig(level=logging.WARNING)
 
@@ -159,3 +171,4 @@ for key, value in companies.items():
         # print(f"Error: {ex}")
 
 res_df.to_csv('out_result.csv', sep=',', index=False)
+load_to_db(res_df)
