@@ -89,7 +89,8 @@ def process_stock_prices(stock_name: str, company_name: str, stock_json: json) -
 
                 if positive_change >= one_percent:
                     positive_change = round(positive_change, 2)
-                    change_date = df_last_3_days_closing[df_last_3_days_closing == df_last_3_days_closing[index + 1]].index[0]
+                    change_date = \
+                        df_last_3_days_closing[df_last_3_days_closing == df_last_3_days_closing[index + 1]].index[0]
 
                     # print(f'{change_date}: at least 1% change. '
                     #      f'Positive change: {positive_change}')
@@ -98,7 +99,8 @@ def process_stock_prices(stock_name: str, company_name: str, stock_json: json) -
                     article_title = process_news(news_response)
 
                     print(company_name, change_date, positive_change, article_title)
-                    df_company = pd.DataFrame([[company_name, change_date, positive_change, article_title]], columns=column_names)
+                    df_company = pd.DataFrame([[company_name, change_date, positive_change, article_title]],
+                                              columns=column_names)
                     result_df = pd.concat([result_df, df_company], ignore_index=True)
                     # print(result_df)
 
@@ -138,11 +140,18 @@ def process_news(news_json: json) -> str:
         return "No articles found!"
 
 
-def load_to_db(df: pd.DataFrame):
+def load_to_db(engine: sqlalchemy.engine.base.Engine, df: pd.DataFrame):
     try:
-        engine = sqlalchemy.create_engine(f'mysql+pymysql://{DbConf.db_conf["user"]}:{DbConf.db_conf["password"]}'
-                                          f'@localhost:{DbConf.db_conf["port"]}/{DbConf.db_conf["db"]}')
         df.to_sql(DbConf.db_conf["table_name"], engine, if_exists='append', index=False)
+    except Exception as e:
+        # logging.error(f"Error: {e}", exc_info=True)
+        raise
+
+
+def read_from_db(engine: sqlalchemy.engine.base.Engine):
+    try:
+        df = pd.read_sql(f'SELECT * FROM {DbConf.db_conf["table_name"]} WHERE Company = "Oracle"', engine)
+        df.to_csv('out_db_result.csv', sep=',', index=False)
     except Exception as e:
         # logging.error(f"Error: {e}", exc_info=True)
         raise
@@ -150,6 +159,10 @@ def load_to_db(df: pd.DataFrame):
 
 # set log level
 logging.basicConfig(level=logging.WARNING)
+
+# set sql engine
+sql_engine = sqlalchemy.create_engine(f'mysql+pymysql://{DbConf.db_conf["user"]}:{DbConf.db_conf["password"]}'
+                                      f'@localhost:{DbConf.db_conf["port"]}/{DbConf.db_conf["db"]}')
 
 companies = {"IBM": "Ibm", "TSLA": "Tesla", "ORCL": "Oracle", "XYZABS": "blablabla", "AMZN": "Amazon"}
 # companies = {"IBM": "Ibm"}
@@ -171,4 +184,9 @@ for key, value in companies.items():
         # print(f"Error: {ex}")
 
 res_df.to_csv('out_result.csv', sep=',', index=False)
-load_to_db(res_df)
+
+try:
+    load_to_db(sql_engine, res_df)
+    read_from_db(sql_engine)
+except Exception as ex:
+    logging.error(ex)
